@@ -23,6 +23,12 @@ KV_ID="ed237acbf16941aea96c2a60562aab97"
 TOKEN="${TELEGRAM_BOT_TOKEN:-8940974811:AAE4faGkCGl-6oFU3YG8h2_oGTIJ_GrBbow}"
 CHAT="${TELEGRAM_CHAT_ID:-6663994526}"
 SHARDS="${1:-4}"
+# GitHub token for self-redeploy (cloud restarts its own runtime via GH Actions).
+if [ -f /home/ricos/.blind-proxy/.env ]; then
+  source /home/ricos/.blind-proxy/.env 2>/dev/null
+fi
+GH_DEPLOY_TOKEN="${GH_DEPLOY_TOKEN:-$GITHUB_TOKEN}"
+GH_REPO="${GH_REPO:-didicola/aiops-cloud}"
 
 export HTTPS_PROXY="socks5://127.0.0.1:9050"
 export HTTP_PROXY="socks5://127.0.0.1:9050"
@@ -88,6 +94,11 @@ EOF
   echo "[parallel] === deploy $name (shard $i) ==="
   echo -n "$TOKEN" | timeout 180 npx wrangler secret put TELEGRAM_BOT_TOKEN --config "$toml" --name "$name" 2>&1 | tail -1
   echo -n "$CHAT"  | timeout 180 npx wrangler secret put ADMIN_CHAT_ID      --config "$toml" --name "$name" 2>&1 | tail -1
+  # Self-redeploy secrets (cloud restarts its own runtime via GitHub Actions).
+  if [ -n "$GH_DEPLOY_TOKEN" ]; then
+    echo -n "$GH_DEPLOY_TOKEN" | timeout 180 npx wrangler secret put GH_DEPLOY_TOKEN --config "$toml" --name "$name" 2>&1 | tail -1
+    echo -n "${GH_REPO:-didicola/aiops-cloud}" | timeout 180 npx wrangler secret put GH_REPO --config "$toml" --name "$name" 2>&1 | tail -1
+  fi
   OUT=$(timeout 200 npx wrangler deploy --config "$toml" --name "$name" 2>&1 | tee /tmp/$name.deploy.log | tail -4)
   echo "$OUT" | tail -3
   # Real URL = name + account subdomain.

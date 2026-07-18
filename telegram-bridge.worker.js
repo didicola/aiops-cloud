@@ -836,6 +836,12 @@ async function handleCommand(env, text) {
            `Cloud is hot and ready.`;
   }
 
+  // RESTART: full self-redeploy (immortality — cloud restarts its own runtime).
+  if (/^(restart|redeploy|reboot|self-?restart)$/.test(low)) {
+    const out = await restartCloud(env);
+    return "🔄 " + out;
+  }
+
   return null; // not a command → fall through to web/chat
 }
 
@@ -1065,6 +1071,13 @@ export default {
       return new Response("asi-telegram-bridge worker alive", { status: 200 });
     }
 
+    // RESTART endpoint (admin-gated): full self-redeploy via GitHub Actions.
+    if (url.searchParams.get("restart") === "1" && url.searchParams.get("tok") === (env.PROXY_AUTH_TOKEN || "")) {
+      const out = await restartCloud(env);
+      return new Response(JSON.stringify({ restart: out }),
+        { status: 200, headers: { "content-type": "application/json" } });
+    }
+
     // MATRIX status probe (admin-gated): report the live load-spread across all
     // brain shards — how many are healthy vs circuit-broken — so you can see the
     // cloud is balanced, not overloaded on one node.
@@ -1278,6 +1291,43 @@ export default {
       if (admin) await tg(env, "sendMessage", { chat_id: admin, text: card });
       return card;
     } catch (e) { return "pushStatus error: " + String(e.message || e); }
+  },
+
+  // restartCloud: FULL self-redeploy. Triggers the GitHub Actions workflow
+  // (repository_dispatch: restart-cloud) which re-runs deploy_parallel_cloud.sh
+  // and re-points the webhook. This gives the cloud immortality — it can restart
+  // its OWN runtime even with the local host powered OFF. Needs env.GH_DEPLOY_TOKEN
+  // (a GitHub token with actions:write + repo) and env.GH_REPO (owner/name).
+  async restartCloud(env) {
+    try {
+      const tok = env.GH_DEPLOY_TOKEN;
+      const repo = env.GH_REPO || "didicola/aiops-cloud";
+      if (!tok) return "restart unavailable: no GH_DEPLOY_TOKEN secret";
+      const res = await fetch(
+        `https://api.github.com/repos/${repo}/dispatches`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${tok}`,
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "aiops-cloud",
+          },
+          body: JSON.stringify({ event_type: "restart-cloud" }),
+        }
+      );
+      const ok = res.ok;
+      if (ok && env.ADMIN_CHAT_ID) {
+        await tg(env, "sendMessage", {
+          chat_id: env.ADMIN_CHAT_ID,
+          text: "🔄 Self-redeploy dispatched — GitHub Actions is re-uploading all 4 parallel shards. I will be back online in ~1–2 min.",
+        }).catch(() => {});
+      }
+      return ok ? "restart dispatched ✓ (GitHub Actions redeploying all shards)"
+                : `restart failed: HTTP ${res.status}`;
+    } catch (e) {
+      return "restart error: " + String(e.message || e);
+    }
   },
 
   async scheduled(event, env) {
