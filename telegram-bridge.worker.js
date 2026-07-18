@@ -1068,14 +1068,15 @@ export default {
           pool_size: (prior.length + fresh.length),
         }), { status: 200, headers: { "content-type": "application/json" } });
       }
-      return new Response("asi-telegram-bridge worker alive", { status: 200 });
-    }
 
     // RESTART endpoint (admin-gated): full self-redeploy via GitHub Actions.
     if (url.searchParams.get("restart") === "1" && url.searchParams.get("tok") === (env.PROXY_AUTH_TOKEN || "")) {
       const out = await restartCloud(env);
       return new Response(JSON.stringify({ restart: out }),
         { status: 200, headers: { "content-type": "application/json" } });
+    }
+
+      return new Response("asi-telegram-bridge worker alive", { status: 200 });
     }
 
     // MATRIX status probe (admin-gated): report the live load-spread across all
