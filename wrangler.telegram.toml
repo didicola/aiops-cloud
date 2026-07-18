@@ -1,0 +1,44 @@
+# wrangler.toml — Cloudflare Worker: serverless Telegram brain (Phase 15).
+# Free tier: 100k requests/day, 10ms CPU/request, always-on (no sleep).
+# Secrets (TELEGRAM_BOT_TOKEN, LLM_URL, LLM_MODEL, ADMIN_CHAT_ID) are injected
+# at deploy time by scripts/deploy_cloud_worker.sh (never committed).
+
+name = "asi-telegram-bridge"
+main = "telegram-bridge.worker.js"
+compatibility_date = "2024-11-01"
+
+# Observability (free). Declared before table-arrays so it binds to the top level.
+observability = { enabled = true }
+
+# Shared cloud memory — Cloudflare D1 (SQLite at the edge, free tier).
+# The Worker reads/writes conversation context and rule.md directives here so the
+# bot keeps a persistent memory EVEN WHEN THE LOCAL MACHINE IS POWERED OFF.
+[[d1_databases]]
+binding = "DB"
+database_name = "asi-cloud-memory"
+database_id = "e5c42405-0fb9-4451-9e3f-0df4b63072eb"
+
+# Expandable free cloud VOLUME (KV, 1 GB free tier) provisioned for FUTURE
+# upgrades — large blobs, cached artifacts, model metadata, learned skills, etc.
+# The bot can read/write env.VOL without touching D1's structured tables.
+[[kv_namespaces]]
+binding = "VOL"
+id = "ed237acbf16941aea96c2a60562aab97"
+
+# MATRIX LOAD-SPREAD: number of logical brain shards the cloud fans chats across.
+# Each shard keeps its OWN circuit-breaker + provider-pool state, so a storm on
+# one chat load is isolated and self-heals without taking the whole cloud down.
+[vars]
+SHARDS = "4"
+
+# LLM cascade keys are pushed as encrypted secrets by deploy_cloud_worker.sh:
+#   OPENROUTER_API_KEY  (primary — deepseek/deepseek-chat:free, llama-3.3-70b:free)
+#   GROQ_API_KEY        (fallback 1 — llama-3.3-70b-versatile, ultra fast)
+#   CEREBRAS_API_KEY    (fallback 2 — llama-3.3-70b)
+#   TELEGRAM_BOT_TOKEN, ADMIN_CHAT_ID
+# Pollinations is the keyless last resort (no key needed).
+
+# Self-heal cron (Phase 18): the bot proactively tests + expands its free provider
+# pool every 30 min so it never stays down. PROXY_AUTH_TOKEN gates the trigger.
+[[triggers]]
+crons = ["*/30 * * * *"]
