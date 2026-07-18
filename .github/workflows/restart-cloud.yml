@@ -1,0 +1,32 @@
+name: restart-cloud
+
+# Triggered by the AI-Ops cloud itself (or the admin) via repository_dispatch.
+# This gives the cloud FULL self-restart / self-redeploy immortality: even with
+# the local host powered OFF, the cloud can re-upload its own Worker code.
+on:
+  repository_dispatch:
+    types: [restart-cloud]
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install wrangler
+        run: npm install -g wrangler
+      - name: Deploy parallel cloud (4 shards, all bound to shared D1+KV)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: bash deploy_parallel_cloud.sh 4
+      - name: Re-point webhook to shard-0 router (idempotent)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
+            -d "url=https://asi-telegram-shard-0.exportdefaultasyncfetchrequestenvconsturl.workers.dev" || true
+      - name: Notify cloud alive
+        run: echo "cloud redeploy complete"
