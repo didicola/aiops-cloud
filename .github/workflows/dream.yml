@@ -1,0 +1,35 @@
+name: Dreaming Protocol
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [dream-cycle]
+concurrency:
+  group: dream-cycle
+  cancel-in-progress: false
+permissions:
+  contents: read
+  actions: read
+env:
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  ADMIN_CHAT_ID: ${{ secrets.ADMIN_CHAT_ID }}
+  POLL_SLEEP: 10
+  ENABLE_LLM: '0'
+  GITHUB_SHA: ${{ github.sha }}
+jobs:
+  dream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore state
+        uses: actions/cache@v4
+        with:
+          path: /tmp/dream_state
+          key: dream-state-${{ github.run_id }}
+          restore-keys: dream-state-
+      - name: Run dream cycle
+        run: python scripts/dream_cycle.py &
+          PID=$!
+          sleep 35
+          kill $PID 2>/dev/null || true

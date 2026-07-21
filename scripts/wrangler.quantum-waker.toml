@@ -1,0 +1,7 @@
+name = "eon-quantum-waker"
+compatibility_date = "2026-07-20"
+main = "scripts/quantum-waker.worker.js"
+
+[[kv_namespaces]]
+binding = "EON_KV"
+id = "eon-quantum-state"
