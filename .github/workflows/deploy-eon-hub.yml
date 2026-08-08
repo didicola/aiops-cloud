@@ -1,7 +1,5 @@
 name: deploy-eon-hub
 
-# Deploys the own-cloud code hub (eon-hub) into our own Cloudflare account.
-# Uses the same CF_DEPLOY_TOKEN secret as restart-cloud — no local tokens needed.
 on:
   repository_dispatch:
     types: [deploy-eon-hub]
@@ -17,12 +15,22 @@ jobs:
           node-version: 22
       - name: Install wrangler
         run: npm install -g wrangler
+      - name: Verify CF token (diagnostic)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_DEPLOY_TOKEN }}
+        run: |
+          echo '=== token verify ==='
+          curl -s https://api.cloudflare.com/client/v4/user/tokens/verify -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | head -c 600
+          echo
+          echo '=== account id resolve ==='
+          curl -s https://api.cloudflare.com/client/v4/accounts -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | head -c 800
+          echo
       - name: Deploy eon-hub
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_DEPLOY_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
         run: |
-          wrangler deploy --config wrangler.eon-hub.toml --name eon-hub
+          wrangler deploy --config wrangler.eon-hub.toml --name eon-hub 2>&1 | tail -30
       - name: Verify eon-hub live
         run: |
-          curl -s -o /dev/null -w "eon-hub HTTP %{http_code}\n" https://eon-hub.exportdefaultasyncfetchrequestenvconsturl.workers.dev/
+          curl -s -o /dev/null -w 'eon-hub HTTP %{http_code}\n' https://eon-hub.exportdefaultasyncfetchrequestenvconsturl.workers.dev/
