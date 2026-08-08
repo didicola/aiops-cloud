@@ -28,5 +28,15 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
             -d "url=https://asi-telegram-shard-0.exportdefaultasyncfetchrequestenvconsturl.workers.dev" || true
+      - name: Deploy eon-p2p-cloud (p2p delegate brain)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_DEPLOY_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          git clone --depth 1 https://github.com/didicola/eon-p2p-cloud.git /tmp/eon-p2p-cloud
+          cd /tmp/eon-p2p-cloud
+          echo "${TELEGRAM_BOT_TOKEN}" | wrangler secret put TELEGRAM_BOT_TOKEN --name eon-p2p-cloud || true
+          wrangler deploy 2>&1 | tail -20
       - name: Notify cloud alive
         run: echo "cloud redeploy complete"
