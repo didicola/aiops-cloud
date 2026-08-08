@@ -1,0 +1,18 @@
+# eon-hub — own-cloud GitHub alternative (part of aiops-cloud account).
+name = "eon-hub"
+main = "eon-hub.worker.js"
+compatibility_date = "2024-11-01"
+
+observability = { enabled = true }
+
+# Shared cloud memory — same D1 + KV as the telegram shards.
+[[d1_databases]]
+binding = "DB"
+database_name = "asi-cloud-memory"
+database_id = "e5c42405-0fb9-4451-9e3f-0df4b63072eb"
+
+[[kv_namespaces]]
+binding = "VOL"
+id = "ed237acbf16941aea96c2a60562aab97"
+
+# Optional: set AUTH_TOKEN as a secret to gate write access.
