@@ -35,12 +35,42 @@ concurrency:
   group: eon-fleet-sentinel
   cancel-in-progress: false
 
+permissions:
+  contents: write # keep-alive step below commits a stamp
+
 jobs:
   sentinel:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+
+      # Self-sustaining keep-alive. GitHub silently disables every scheduled
+      # workflow in a repository that goes 60 days without activity — visible in
+      # this very repo (`Dreaming Protocol` -> disabled_inactivity). A lane that
+      # guards the fleet must not die that way, so it commits a stamp every
+      # ~25 days: activity that keeps its own schedule enabled.
+      - name: Keep-alive (defeat the 60-day inactivity disable)
+        env:
+          GIT_AUTHOR_NAME: eon-fleet-sentinel
+          GIT_AUTHOR_EMAIL: eon@local
+          GIT_COMMITTER_NAME: eon-fleet-sentinel
+          GIT_COMMITTER_EMAIL: eon@local
+        run: |
+          set -euo pipefail
+          STAMP=".github/keepalive.txt"
+          LAST=$(cat "$STAMP" 2>/dev/null || echo "1970-01-01")
+          DAYS=$(( ( $(date -u +%s) - $(date -u -d "$LAST" +%s) ) / 86400 ))
+          echo "keep-alive stamp: $LAST (${DAYS} days old)"
+          if [ "$DAYS" -ge 25 ]; then
+            date -u +%Y-%m-%d > "$STAMP"
+            git add "$STAMP"
+            git commit -q -m "sentinel keep-alive $(date -u +%Y-%m-%d): keeps scheduled workflows enabled"
+            git push -q
+            echo "  committed a fresh keep-alive stamp"
+          else
+            echo "  nothing to do (< 25 days since the last stamp)"
+          fi
 
       - uses: actions/setup-python@v5
         with:
