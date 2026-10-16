@@ -1,0 +1,91 @@
+name: eon-fleet-sentinel
+
+# EON CLOUD FLEET SENTINEL (2026-10-16) — read-only, cloud-resident.
+#
+# ROLE SPLIT (deliberate, to respect the single-writer rule):
+#   * HEALER   — didicola/eon200-watch :: .github/workflows/eon200-heal.yml
+#                (cron */20 + :43). Owns every write to the fleet.
+#   * SENTINEL — this workflow. Probes every Worker + Pages project read-only
+#                (--sweep, never --heal) at an offset cadence and only speaks up
+#                when something is NOT 200. It never uploads, so it can never
+#                race the healer for the same script.
+#
+# Why a GitHub runner and not a Worker: Cloudflare refuses Worker->Worker fetches
+# in the same zone (error 1042), so the cloud AGI's own fleet duty can only ever
+# report `blocked_1042`. A runner in a different network position has no such
+# limit (proven: GH-runner probes return real 200s, not WAF blocks).
+#
+# Why a second, redundant lane at all: scheduled GitHub workflows are silently
+# disabled after 60 days without repository activity (this very repo shows it:
+# `Dreaming Protocol` -> disabled_inactivity). If the healer lane dies that way,
+# this sentinel still notices and says so in Telegram.
+#
+# Secrets (added 2026-10-16 — the older CF_DEPLOY_TOKEN/CF_ACCOUNT_ID pair can no
+# longer list this account's scripts, which is why the first run failed):
+#   EON_CF_TOKEN  — Cloudflare API token with Workers Scripts:Read
+#   EON_CF_ACC    — Cloudflare account id
+#   EON_TG_BOT    — @Eon_telegram_bot token
+#   EON_TG_CHAT   — chat receiving the alert
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: eon-fleet-sentinel
+  cancel-in-progress: false
+
+jobs:
+  sentinel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fleet probe (read-only) + alert on non-200
+        env:
+          CF_TOKEN: ${{ secrets.EON_CF_TOKEN }}
+          CF_ACC: ${{ secrets.EON_CF_ACC }}
+          TG_BOT: ${{ secrets.EON_TG_BOT }}
+          TG_CHAT: ${{ secrets.EON_TG_CHAT }}
+          EON_LANE: "gh-sentinel"
+        run: |
+          set -o pipefail
+          python3 tools/fleet/eon200-heal-lite.py --sweep --index tools/fleet/eon200-index.html | tee lane.json
+          python3 - <<'PY'
+          import json, os, urllib.parse, urllib.request
+          d = json.load(open("lane.json"))
+          broken = [str(b) for b in (d.get("broken") or [])]
+          skipped = d.get("skipped_no_http") or []
+          print(f"sentinel: all200={d.get('all200')} workers={d.get('workers_ok')}/{d.get('workers')} "
+                f"pages={d.get('pages_ok')}/{d.get('pages')} broken={broken} no_http={skipped}")
+          if broken:
+              bot, chat = os.environ.get("TG_BOT", ""), os.environ.get("TG_CHAT", "")
+              text = ("\U0001F6A8 EON FLEET SENTINEL (cloud, read-only)\n"
+                      f"NOT-200: {', '.join(broken)}\n"
+                      f"workers {d.get('workers_ok')}/{d.get('workers')} | pages {d.get('pages_ok')}/{d.get('pages')}\n"
+                      "healer lane: didicola/eon200-watch (cron */20 + :43)")
+              if bot and chat:
+                  body = urllib.parse.urlencode({"chat_id": chat, "text": text}).encode()
+                  req = urllib.request.Request(
+                      f"https://api.telegram.org/bot{bot}/sendMessage", data=body,
+                      headers={"Content-Type": "application/x-www-form-urlencoded"})
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as f:
+                          print("  telegram alert:", b'"ok":true' in f.read())
+                  except Exception as e:
+                      print("  telegram alert failed:", str(e)[:140])
+              raise SystemExit(1)
+          PY
+
+      - name: Upload sentinel report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-sentinel-report
+          path: lane.json
+          retention-days: 7
