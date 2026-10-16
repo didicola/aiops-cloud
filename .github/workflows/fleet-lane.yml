@@ -11,10 +11,13 @@ name: eon-fleet-lane
 # the same zone (error 1042), so a Worker can neither probe nor re-upload its peers
 # over HTTP. An external runner has no such limit — this lane is that runner.
 #
-# Secrets used (already present in this repo):
-#   CF_DEPLOY_TOKEN     — Cloudflare API token with Workers Scripts:Edit
-#   CF_ACCOUNT_ID       — Cloudflare account id
-#   TELEGRAM_BOT_TOKEN  — bot used for the lane report
+# Secrets used (EON_* ones were added 2026-10-16 because the older
+# CF_DEPLOY_TOKEN/CF_ACCOUNT_ID pair could no longer list the account's scripts,
+# so the lane failed at its very first API call):
+#   EON_CF_TOKEN   — Cloudflare API token with Workers Scripts:Edit/Read
+#   EON_CF_ACC     — Cloudflare account id
+#   EON_TG_BOT     — @Eon_telegram_bot token, used for the lane report
+#   EON_TG_CHAT    — chat that receives the lane report
 on:
   schedule:
     - cron: "*/20 * * * *"
@@ -37,10 +40,10 @@ jobs:
 
       - name: Fleet probe + heal (workers + pages)
         env:
-          CF_TOKEN: ${{ secrets.CF_DEPLOY_TOKEN }}
-          CF_ACC: ${{ secrets.CF_ACCOUNT_ID }}
-          TG_BOT: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT: "6663994526"
+          CF_TOKEN: ${{ secrets.EON_CF_TOKEN }}
+          CF_ACC: ${{ secrets.EON_CF_ACC }}
+          TG_BOT: ${{ secrets.EON_TG_BOT }}
+          TG_CHAT: ${{ secrets.EON_TG_CHAT }}
           EON_LANE: "gh-actions"
         run: |
           set -o pipefail
