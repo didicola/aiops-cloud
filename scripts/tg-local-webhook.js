@@ -1,7 +1,7 @@
 const http = require("http");
 const https = require("https");
 
-const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "8940974811:AAE4faGkC-8m02vWF1SxAM7nNHRf9NjsYMs";
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
 const EON_RELAY = "http://127.0.0.1:18920";
 const PORT = parseInt(process.env.PORT || "18926", 10);
 

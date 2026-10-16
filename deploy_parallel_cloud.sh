@@ -20,7 +20,7 @@ ls -la "$SRC" >/dev/null 2>&1 || { echo "[parallel] ERROR: $SRC not found"; exit
 D1_ID="e5c42405-0fb9-4451-9e3f-0df4b63072eb"
 D1_NAME="asi-cloud-memory"
 KV_ID="ed237acbf16941aea96c2a60562aab97"
-TOKEN="${TELEGRAM_BOT_TOKEN:-8940974811:AAE4faGkCGl-6oFU3YG8h2_oGTIJ_GrBbow}"
+TOKEN="${TELEGRAM_BOT_TOKEN:-REDACTED_DEAD_TOKEN}"
 CHAT="${TELEGRAM_CHAT_ID:-6663994526}"
 SHARDS="${1:-4}"
 # GitHub token for self-redeploy (cloud restarts its own runtime via GH Actions).
